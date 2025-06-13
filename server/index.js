@@ -62,3 +62,30 @@ const messageSchema = new mongoose.Schema({
 const User = mongoose.model('User', userSchema);
 const Room = mongoose.model('Room', roomSchema);
 const Message = mongoose.model('Message', messageSchema);
+// Middleware d'authentification
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ message: 'Token manquant' });
+  }
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) {
+      return res.status(403).json({ message: 'Token invalide' });
+    }
+    req.user = user;
+    next();
+  });
+};
+
+// Fonction pour générer un code de salle unique
+const generateRoomCode = () => {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let result = '';
+  for (let i = 0; i < 6; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+};
