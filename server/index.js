@@ -89,3 +89,75 @@ const generateRoomCode = () => {
   }
   return result;
 };
+
+// Routes d'authentification
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const { username, email, password } = req.body;
+
+    // Vérifications
+    if (!username || !email || !password) {
+      return res.status(400).json({ message: 'Tous les champs sont requis' });
+    }
+
+    // Vérifier si l'utilisateur existe déjà
+    const existingUser = await User.findOne({ 
+      $or: [{ email }, { username }] 
+    });
+    
+    if (existingUser) {
+      return res.status(400).json({ 
+        message: 'Utilisateur ou email déjà existant' 
+      });
+    }
+
+    // Hasher le mot de passe
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Créer l'utilisateur
+    const user = new User({
+      username,
+      email,
+      password: hashedPassword,
+    });
+
+    await user.save();
+
+    // Générer le token JWT
+    const token = jwt.sign(
+      { userId: user._id, username: user.username },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    res.status(201).json({
+      message: 'Utilisateur créé avec succès',
+      token,
+      user: {
+        id: user._id,
+        username: user.username,
+        email: user.email,
+        createdAt: user.createdAt,
+      },
+    });
+  } catch (error) {
+    console.error('Erreur inscription:', error);
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    // Vérifications
+    if (!email || !password) {
+      return res.status(400).json({ message: 'Email et mot de passe requis' });
+    }
+
+    // Trouver l'utilisateur
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(401).json({ message: 'Identifiants incorrects' });
+    }
+    
