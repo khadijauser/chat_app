@@ -454,5 +454,77 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Envoyer un message
+  socket.on('send-message', async (messageData) => {
+    try {
+      const { roomId, text, userId, username } = messageData;
+      
+      // Sauvegarder le message en base
+      const message = new Message({
+        text,
+        userId,
+        username,
+        roomId,
+      });
+      
+      await message.save();
+      
+      // Mettre à jour l'activité de la salle
+      await Room.findByIdAndUpdate(roomId, {
+        lastActivity: new Date(),
+      });
+      
+      // Diffuser le message à tous les membres de la salle
+      io.to(roomId).emit('message', {
+        id: message._id,
+        text: message.text,
+        userId: message.userId,
+        username: message.username,
+        timestamp: message.timestamp,
+      });
+      
+      console.log(`💬 Message de ${username} dans la salle ${roomId}`);
+    } catch (error) {
+      console.error('Erreur envoi message:', error);
+    }
+  });
+
+  // Déconnexion
+  socket.on('disconnect', () => {
+    connectedUsers.delete(socket.id);
+    console.log('🔌 Utilisateur déconnecté:', socket.id);
+  });
+});
+
+// Fonction utilitaire pour obtenir les utilisateurs connectés dans une salle
+async function getRoomConnectedUsers(roomId) {
+  const sockets = await io.in(roomId).fetchSockets();
+  const users = [];
   
+  for (const socket of sockets) {
+    const userData = connectedUsers.get(socket.id);
+    if (userData) {
+      users.push(userData);
+    }
+  }
+  
+  return users;
+} 
+// Démarrage du serveur
+server.listen(PORT, () => {
+  console.log(`🚀 Serveur démarré sur le port ${PORT}`);
+  console.log(`📡 Socket.IO prêt pour les connexions temps réel`);
+});
+
+// Gestion des erreurs
+process.on('unhandledRejection', (err) => {
+  console.error('❌ Erreur non gérée:', err);
+  process.exit(1);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('❌ Exception non capturée:', err);
+  process.exit(1);
+});
+
 
