@@ -333,4 +333,29 @@ app.get('/api/rooms/:roomId', authenticateToken, async (req, res) => {
     if (!room) {
       return res.status(404).json({ message: 'Salle non trouvée' });
     }
+     // Vérifier que l'utilisateur est membre de la salle
+    if (!room.members.includes(userId)) {
+      return res.status(403).json({ message: 'Accès refusé' });
+    }
+
+    res.json({
+      room: {
+        id: room._id,
+        name: room.name,
+        code: room.code,
+        membersCount: room.members.length,
+        createdAt: room.createdAt,
+      },
+    });
+  } catch (error) {
+    console.error('Erreur récupération salle:', error);
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+});
+
+app.get('/api/rooms/:roomId/messages', authenticateToken, async (req, res) => {
+  try {
+    const roomId = req.params.roomId;
+    const userId = req.user.userId;
+
     
