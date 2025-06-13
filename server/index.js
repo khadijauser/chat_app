@@ -23,3 +23,22 @@ const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/chatap
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Connexion MongoDB
+mongoose.connect(MONGODB_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+}).then(() => {
+  console.log('✅ Connecté à MongoDB');
+}).catch((error) => {
+  console.error('❌ Erreur MongoDB:', error);
+  process.exit(1);
+});
+
+// Schémas MongoDB
+const userSchema = new mongoose.Schema({
+  username: { type: String, required: true, unique: true },
+  email: { type: String, required: true, unique: true },
+  password: { type: String, required: true },
+  createdAt: { type: Date, default: Date.now },
+});
