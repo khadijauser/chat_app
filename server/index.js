@@ -262,4 +262,75 @@ app.post('/api/rooms/join', authenticateToken, async (req, res) => {
     if (!code) {
       return res.status(400).json({ message: 'Code de salle requis' });
     }
+    // Trouver la salle
+    const room = await Room.findOne({ code });
+    if (!room) {
+      return res.status(404).json({ message: 'Salle non trouvée' });
+    }
+
+    // Vérifier si l'utilisateur est déjà membre
+    if (!room.members.includes(userId)) {
+      room.members.push(userId);
+      await room.save();
+    }
+
+    res.json({
+      message: 'Salle rejointe avec succès',
+      room: {
+        id: room._id,
+        name: room.name,
+        code: room.code,
+        createdAt: room.createdAt,
+      },
+    });
+  } catch (error) {
+    console.error('Erreur rejoindre salle:', error);
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+});
+
+app.get('/api/rooms/user/:userId', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.params.userId;
+
+    // Vérifier que l'utilisateur demande ses propres salles
+    if (userId !== req.user.userId) {
+      return res.status(403).json({ message: 'Accès refusé' });
+    }
+
+    const rooms = await Room.find({ members: userId })
+      .populate('createdBy', 'username')
+      .sort({ lastActivity: -1 });
+
+    const roomsWithStats = await Promise.all(
+      rooms.map(async (room) => {
+        const messagesCount = await Message.countDocuments({ roomId: room._id });
+        return {
+          id: room._id,
+          name: room.name,
+          code: room.code,
+          membersCount: room.members.length,
+          lastActivity: room.lastActivity,
+          unreadCount: 0, // À implémenter selon vos besoins
+          createdAt: room.createdAt,
+        };
+      })
+    );
+
+    res.json({ rooms: roomsWithStats });
+  } catch (error) {
+    console.error('Erreur récupération salles:', error);
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+});
+
+app.get('/api/rooms/:roomId', authenticateToken, async (req, res) => {
+  try {
+    const roomId = req.params.roomId;
+    const userId = req.user.userId;
+
+    const room = await Room.findById(roomId);
+    if (!room) {
+      return res.status(404).json({ message: 'Salle non trouvée' });
+    }
     
