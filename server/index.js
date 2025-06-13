@@ -401,3 +401,31 @@ app.get('/api/users/:userId/stats', authenticateToken, async (req, res) => {
   }
 });
 
+// Gestion des WebSockets
+const connectedUsers = new Map();
+
+io.on('connection', (socket) => {
+  console.log('🔗 Nouvel utilisateur connecté:', socket.id);
+
+  // Authentification Socket.IO
+  const { userId, username } = socket.handshake.auth;
+  if (userId && username) {
+    connectedUsers.set(socket.id, { userId, username });
+  }
+
+  // Rejoindre une salle
+  socket.on('join-room', async (roomId) => {
+    try {
+      socket.join(roomId);
+      
+      // Obtenir la liste des utilisateurs connectés dans cette salle
+      const roomUsers = await getRoomConnectedUsers(roomId);
+      
+      // Notifier les autres utilisateurs
+      socket.to(roomId).emit('user-joined', {
+        userId,
+        username,
+        users: roomUsers,
+      });
+      
+
