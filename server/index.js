@@ -427,5 +427,31 @@ io.on('connection', (socket) => {
         username,
         users: roomUsers,
       });
+       // Envoyer la liste des utilisateurs au nouvel arrivant
+      socket.emit('room-users', roomUsers);
       
+      console.log(`👥 ${username} a rejoint la salle ${roomId}`);
+    } catch (error) {
+      console.error('Erreur rejoindre salle:', error);
+    }
+  });
+
+  // Quitter une salle
+  socket.on('leave-room', async (roomId) => {
+    try {
+      socket.leave(roomId);
+      
+      const roomUsers = await getRoomConnectedUsers(roomId);
+      socket.to(roomId).emit('user-left', {
+        userId,
+        username,
+        users: roomUsers,
+      });
+      
+      console.log(`👋 ${username} a quitté la salle ${roomId}`);
+    } catch (error) {
+      console.error('Erreur quitter salle:', error);
+    }
+  });
+  
 
