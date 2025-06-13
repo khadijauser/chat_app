@@ -160,4 +160,244 @@ app.post('/api/auth/login', async (req, res) => {
     if (!user) {
       return res.status(401).json({ message: 'Identifiants incorrects' });
     }
+
+
+    // Vérifier le mot de passe
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      return res.status(401).json({ message: 'Identifiants incorrects' });
+    }
+
+    // Générer le token JWT
+    const token = jwt.sign(
+      { userId: user._id, username: user.username },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    res.json({
+      message: 'Connexion réussie',
+      token,
+      user: {
+        id: user._id,
+        username: user.username,
+        email: user.email,
+        createdAt: user.createdAt,
+      },
+    });
+  } catch (error) {
+    console.error('Erreur connexion:', error);
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+});
+
+app.get('/api/auth/me', authenticateToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.userId).select('-password');
+    if (!user) {
+      return res.status(404).json({ message: 'Utilisateur non trouvé' });
+    }
     
+    res.json({
+      user: {
+        id: user._id,
+        username: user.username,
+        email: user.email,
+        createdAt: user.createdAt,
+      },
+    });
+  } catch (error) {
+    console.error('Erreur récupération utilisateur:', error);
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+});
+// Routes des salles
+app.post('/api/rooms', authenticateToken, async (req, res) => {
+  try {
+    const { name } = req.body;
+    const userId = req.user.userId;
+
+    if (!name) {
+      return res.status(400).json({ message: 'Nom de salle requis' });
+    }
+
+    // Générer un code unique
+    let code;
+    let existingRoom;
+    do {
+      code = generateRoomCode();
+      existingRoom = await Room.findOne({ code });
+    } while (existingRoom);
+
+    // Créer la salle
+    const room = new Room({
+      name,
+      code,
+      createdBy: userId,
+      members: [userId],
+    });
+
+    await room.save();
+
+    res.status(201).json({
+      message: 'Salle créée avec succès',
+      room: {
+        id: room._id,
+        name: room.name,
+        code: room.code,
+        createdAt: room.createdAt,
+      },
+    });
+  } catch (error) {
+    console.error('Erreur création salle:', error);
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+});
+
+app.post('/api/rooms/join', authenticateToken, async (req, res) => {
+  try {
+    const { code } = req.body;
+    const userId = req.user.userId;
+
+    if (!code) {
+      return res.status(400).json({ message: 'Code de salle requis' });
+    }
+    // Trouver la salle
+    const room = await Room.findOne({ code });
+    if (!room) {
+      return res.status(404).json({ message: 'Salle non trouvée' });
+    }
+
+    // Vérifier si l'utilisateur est déjà membre
+    if (!room.members.includes(userId)) {
+      room.members.push(userId);
+      await room.save();
+    }
+
+    res.json({
+      message: 'Salle rejointe avec succès',
+      room: {
+        id: room._id,
+        name: room.name,
+        code: room.code,
+        createdAt: room.createdAt,
+      },
+    });
+  } catch (error) {
+    console.error('Erreur rejoindre salle:', error);
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+});
+
+app.get('/api/rooms/user/:userId', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.params.userId;
+
+    // Vérifier que l'utilisateur demande ses propres salles
+    if (userId !== req.user.userId) {
+      return res.status(403).json({ message: 'Accès refusé' });
+    }
+
+    const rooms = await Room.find({ members: userId })
+      .populate('createdBy', 'username')
+      .sort({ lastActivity: -1 });
+
+    const roomsWithStats = await Promise.all(
+      rooms.map(async (room) => {
+        const messagesCount = await Message.countDocuments({ roomId: room._id });
+        return {
+          id: room._id,
+          name: room.name,
+          code: room.code,
+          membersCount: room.members.length,
+          lastActivity: room.lastActivity,
+          unreadCount: 0, // À implémenter selon vos besoins
+          createdAt: room.createdAt,
+        };
+      })
+    );
+
+    res.json({ rooms: roomsWithStats });
+  } catch (error) {
+    console.error('Erreur récupération salles:', error);
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+});
+
+app.get('/api/rooms/:roomId', authenticateToken, async (req, res) => {
+  try {
+    const roomId = req.params.roomId;
+    const userId = req.user.userId;
+
+    const room = await Room.findById(roomId);
+    if (!room) {
+      return res.status(404).json({ message: 'Salle non trouvée' });
+    }
+     // Vérifier que l'utilisateur est membre de la salle
+    if (!room.members.includes(userId)) {
+      return res.status(403).json({ message: 'Accès refusé' });
+    }
+
+    res.json({
+      room: {
+        id: room._id,
+        name: room.name,
+        code: room.code,
+        membersCount: room.members.length,
+        createdAt: room.createdAt,
+      },
+    });
+  } catch (error) {
+    console.error('Erreur récupération salle:', error);
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+});
+
+app.get('/api/rooms/:roomId/messages', authenticateToken, async (req, res) => {
+  try {
+    const roomId = req.params.roomId;
+    const userId = req.user.userId;
+
+    // Vérifier que l'utilisateur est membre de la salle
+    const room = await Room.findById(roomId);
+    if (!room || !room.members.includes(userId)) {
+      return res.status(403).json({ message: 'Accès refusé' });
+    }
+
+    const messages = await Message.find({ roomId })
+      .sort({ timestamp: 1 })
+      .limit(100); // Limiter à 100 derniers messages
+
+    res.json({ messages });
+  } catch (error) {
+    console.error('Erreur récupération messages:', error);
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+});
+
+// Routes utilisateur
+app.get('/api/users/:userId/stats', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.params.userId;
+
+    // Vérifier que l'utilisateur demande ses propres stats
+    if (userId !== req.user.userId) {
+      return res.status(403).json({ message: 'Accès refusé' });
+    }
+
+    const roomsCount = await Room.countDocuments({ members: userId });
+    const messagesCount = await Message.countDocuments({ userId });
+
+    res.json({
+      stats: {
+        roomsCount,
+        messagesCount,
+        joinedAt: new Date(), // À récupérer depuis la base de données
+      },
+    });
+  } catch (error) {
+    console.error('Erreur récupération stats:', error);
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+});
+
