@@ -211,3 +211,55 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
     res.status(500).json({ message: 'Erreur serveur' });
   }
 });
+// Routes des salles
+app.post('/api/rooms', authenticateToken, async (req, res) => {
+  try {
+    const { name } = req.body;
+    const userId = req.user.userId;
+
+    if (!name) {
+      return res.status(400).json({ message: 'Nom de salle requis' });
+    }
+
+    // Générer un code unique
+    let code;
+    let existingRoom;
+    do {
+      code = generateRoomCode();
+      existingRoom = await Room.findOne({ code });
+    } while (existingRoom);
+
+    // Créer la salle
+    const room = new Room({
+      name,
+      code,
+      createdBy: userId,
+      members: [userId],
+    });
+
+    await room.save();
+
+    res.status(201).json({
+      message: 'Salle créée avec succès',
+      room: {
+        id: room._id,
+        name: room.name,
+        code: room.code,
+        createdAt: room.createdAt,
+      },
+    });
+  } catch (error) {
+    console.error('Erreur création salle:', error);
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+});
+
+app.post('/api/rooms/join', authenticateToken, async (req, res) => {
+  try {
+    const { code } = req.body;
+    const userId = req.user.userId;
+
+    if (!code) {
+      return res.status(400).json({ message: 'Code de salle requis' });
+    }
+    
