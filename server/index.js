@@ -509,5 +509,22 @@ async function getRoomConnectedUsers(roomId) {
   }
   
   return users;
-}
+} 
+// Démarrage du serveur
+server.listen(PORT, () => {
+  console.log(`🚀 Serveur démarré sur le port ${PORT}`);
+  console.log(`📡 Socket.IO prêt pour les connexions temps réel`);
+});
+
+// Gestion des erreurs
+process.on('unhandledRejection', (err) => {
+  console.error('❌ Erreur non gérée:', err);
+  process.exit(1);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('❌ Exception non capturée:', err);
+  process.exit(1);
+});
+
 
